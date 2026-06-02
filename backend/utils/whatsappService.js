@@ -54,14 +54,14 @@ const formatPhone = (phone) => {
   if (!phone) return null;
   let clean = phone.replace(/\D/g, '');
   if (!clean.startsWith('91')) {
-      clean = '91' + clean;
+    clean = '91' + clean;
   }
   return `${clean}@c.us`;
 };
 
 // ── Booking Confirmed (sent to customer) ──────────────────────────────────────
 export const sendBookingConfirmedMessage = async ({ bookingId, customerName, customerPhone, pickup, drop, date, vehicleType }) => {
-  const body = `Hi ${customerName}, your Nanban Taxi booking is confirmed.\nPickup: ${pickup}\nDrop: ${drop}\nDate/Time: ${date}\nVehicle Type: ${vehicleType}\nThank you for choosing Nanban Taxi 8015999100.`;
+  const body = `Hi ${customerName}, your Nanban Taxi booking is confirmed.\nPickup: ${pickup}\nDrop: ${drop}\nDate/Time: ${date}\nVehicle Type: ${vehicleType}\nThank you for choosing Nanban Taxi +91 9600989735.`;
 
   await Message.create({
     bookingId,
