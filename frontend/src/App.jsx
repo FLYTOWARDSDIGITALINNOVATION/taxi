@@ -9,6 +9,7 @@ import Drivers from './pages/Drivers';
 import Taxis from './pages/Taxis';
 import Notifications from './pages/Notifications';
 import Messages from './pages/Messages';
+import Settings from './pages/Settings';
 import './App.css';
 
 const Layout = ({ children, sidebarOpen, setSidebarOpen }) => {
@@ -44,11 +45,7 @@ function App() {
       <Route path="/notifications" element={<Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}><Notifications /></Layout>} />
       <Route path="/messages" element={<Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}><Messages /></Layout>} />
       
-      <Route path="/settings" element={<Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
-        <h1 className="section-title">Settings</h1>
-        <p className="section-subtitle">Configure your application preferences</p>
-        <div className="card">Coming soon...</div>
-      </Layout>} />
+      <Route path="/settings" element={<Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}><Settings /></Layout>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

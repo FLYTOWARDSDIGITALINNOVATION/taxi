@@ -6,7 +6,7 @@ import { Booking } from './models/Booking.js';
 import { Driver } from './models/Driver.js';
 import { Taxi } from './models/Taxi.js';
 import { Message } from './models/Message.js';
-import { sendCustomerNotification, sendDriverNotification, sendTripClosedMessage, sendBookingConfirmedMessage, initializeWhatsApp } from './utils/whatsappService.js';
+import { sendCustomerNotification, sendDriverNotification, sendTripClosedMessage, sendBookingConfirmedMessage, initializeWhatsApp, getWhatsAppStatus } from './utils/whatsappService.js';
 
 
 dotenv.config();
@@ -45,6 +45,16 @@ app.get('/api/stats', async (req, res) => {
       taxis: { total: taxisTotal, active: taxisActive },
       trends: { totalBookings: '+12%' }
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// WhatsApp Status
+app.get('/api/whatsapp/status', (req, res) => {
+  try {
+    const status = getWhatsAppStatus();
+    res.json(status);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

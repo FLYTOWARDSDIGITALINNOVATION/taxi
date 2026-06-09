@@ -2,6 +2,8 @@ import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 import qrcode from 'qrcode-terminal';
 import { Message } from '../models/Message.js';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * Message Notification Service (Free WhatsApp Integration)
@@ -11,18 +13,51 @@ import { Message } from '../models/Message.js';
 
 let waClient = null;
 let isWaConnected = false;
+let latestQr = null;
+let waStatus = 'initializing'; // initializing, qr_ready, connected, disconnected
+
+export const getWhatsAppStatus = () => {
+  return { status: waStatus, qr: latestQr };
+};
 
 export const initializeWhatsApp = () => {
+  // Clear stale lockfiles to prevent EBUSY crash on VPS restarts
+  try {
+    const lockfile = path.join(process.cwd(), '.wwebjs_auth', 'session', 'lockfile');
+    const singleton = path.join(process.cwd(), '.wwebjs_auth', 'session', 'SingletonLock');
+    if (fs.existsSync(lockfile)) fs.unlinkSync(lockfile);
+    if (fs.existsSync(singleton)) fs.unlinkSync(singleton);
+  } catch (e) {
+    console.log('[WhatsApp Warning] Could not remove lock files:', e.message);
+  }
+
   waClient = new Client({
     authStrategy: new LocalAuth(),
+    webVersionCache: { 
+      type: 'remote', 
+      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html' 
+    },
     puppeteer: {
       headless: true,
       executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-extensions']
-    }
+      args: [
+        '--no-sandbox', 
+        '--disable-setuid-sandbox', 
+        '--disable-extensions',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu'
+      ]
+    },
+    authTimeoutMs: 60000,
+    qrMaxRetries: 3
   });
 
   waClient.on('qr', (qr) => {
+    latestQr = qr;
+    waStatus = 'qr_ready';
     console.log('\n\n======================================================');
     console.log('📱 SCAN THIS QR CODE IN WHATSAPP TO LINK YOUR ACCOUNT 📱');
     console.log('======================================================\n');
@@ -31,6 +66,8 @@ export const initializeWhatsApp = () => {
 
   waClient.on('ready', () => {
     isWaConnected = true;
+    waStatus = 'connected';
+    latestQr = null;
     console.log('\n✅ WhatsApp Client is READY and linked!');
   });
 
@@ -42,12 +79,42 @@ export const initializeWhatsApp = () => {
     console.error('❌ WhatsApp Authentication failure', msg);
   });
 
-  waClient.on('disconnected', (reason) => {
+  waClient.on('disconnected', async (reason) => {
     console.log('❌ WhatsApp Client was disconnected', reason);
     isWaConnected = false;
+    waStatus = 'disconnected';
+    latestQr = null;
+
+    // Destroy current client
+    try {
+      await waClient.destroy();
+    } catch (e) {
+      console.log('Error destroying client on disconnect:', e.message);
+    }
+
+    // Force clear the entire session directory to ensure a fresh QR code
+    try {
+      const authPath = path.join(process.cwd(), '.wwebjs_auth');
+      if (fs.existsSync(authPath)) {
+        fs.rmSync(authPath, { recursive: true, force: true });
+      }
+    } catch (e) {
+      console.log('Error clearing auth directory:', e.message);
+    }
+
+    // Instead of re-initializing in the same process (which causes Puppeteer crashes),
+    // we cleanly exit the node process. Your VPS / PM2 / Nodemon will automatically 
+    // restart the backend with a 100% fresh state and generate the QR code instantly.
+    console.log('🔄 Restarting Node process to get a fresh WhatsApp session...');
+    setTimeout(() => {
+      process.exit(0);
+    }, 1000);
   });
 
-  waClient.initialize();
+  waClient.initialize().catch(err => {
+    console.error('❌ WhatsApp Initialization Error:', err);
+    waStatus = 'disconnected';
+  });
 };
 
 const formatPhone = (phone) => {
@@ -176,3 +243,23 @@ async function _tryWhatsApp(chatId, body) {
     console.error(`❌ Failed to send WhatsApp message to ${chatId}:`, err.message);
   }
 }
+
+// ── Handle VPS / Server Restart Lockfile cleanup ─────────────────────────────
+const shutdownWhatsApp = async () => {
+  if (waClient) {
+    console.log('Shutting down WhatsApp client...');
+    try {
+      await waClient.destroy();
+      console.log('WhatsApp client shut down gracefully.');
+    } catch (err) {
+      console.log('Error shutting down WhatsApp client:', err.message);
+    }
+  }
+  process.exit(0);
+};
+
+// Graceful exit to prevent lockfile issues on VPS
+process.on('SIGINT', shutdownWhatsApp);
+process.on('SIGTERM', shutdownWhatsApp);
+process.on('SIGUSR2', shutdownWhatsApp); // For nodemon
+
