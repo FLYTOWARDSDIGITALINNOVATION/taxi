@@ -33,23 +33,10 @@ export const initializeWhatsApp = () => {
 
   waClient = new Client({
     authStrategy: new LocalAuth(),
-    webVersionCache: { 
-      type: 'remote', 
-      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html' 
-    },
     puppeteer: {
       headless: true,
       executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-      args: [
-        '--no-sandbox', 
-        '--disable-setuid-sandbox', 
-        '--disable-extensions',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu'
-      ]
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-extensions']
     },
     authTimeoutMs: 60000,
     qrMaxRetries: 3
@@ -102,13 +89,11 @@ export const initializeWhatsApp = () => {
       console.log('Error clearing auth directory:', e.message);
     }
 
-    // Instead of re-initializing in the same process (which causes Puppeteer crashes),
-    // we cleanly exit the node process. Your VPS / PM2 / Nodemon will automatically 
-    // restart the backend with a 100% fresh state and generate the QR code instantly.
-    console.log('🔄 Restarting Node process to get a fresh WhatsApp session...');
+    // Fast restart to show QR immediately
     setTimeout(() => {
-      process.exit(0);
-    }, 1000);
+      console.log('🔄 Re-initializing WhatsApp to get new QR code...');
+      initializeWhatsApp();
+    }, 2000);
   });
 
   waClient.initialize().catch(err => {
