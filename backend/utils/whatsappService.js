@@ -35,9 +35,12 @@ export const initializeWhatsApp = () => {
     authStrategy: new LocalAuth(),
     puppeteer: {
       headless: true,
-      executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      // Use the bundled Chromium on non‑Windows or when the custom Chrome path is missing.
+      ...(process.env.WHATSAPP_CHROME_PATH && fs.existsSync(process.env.WHATSAPP_CHROME_PATH)
+        ? { executablePath: process.env.WHATSAPP_CHROME_PATH }
+        : {}),
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-extensions']
-    },
+    }, // end puppeteer config
     authTimeoutMs: 60000,
     qrMaxRetries: 3
   });
