@@ -20,49 +20,6 @@ export const getWhatsAppStatus = () => {
   return { status: waStatus, qr: latestQr };
 };
 
-export const restartWhatsApp = async () => {
-  console.log('🔄 Manual WhatsApp restart requested...');
-  waStatus = 'initializing';
-  latestQr = null;
-  isWaConnected = false;
-
-  if (waClient) {
-    try {
-      let browserPid = null;
-      if (waClient.pupBrowser && waClient.pupBrowser.process) {
-        const proc = waClient.pupBrowser.process();
-        if (proc) browserPid = proc.pid;
-      }
-
-      await waClient.destroy();
-
-      if (browserPid) {
-        try {
-          process.kill(browserPid, 'SIGKILL');
-        } catch (e) {}
-      }
-    } catch (e) {
-      console.log('Error destroying client:', e.message);
-    }
-  }
-  
-  // Give Windows 3 seconds to fully kill the chrome.exe process before deleting files
-  setTimeout(() => {
-    try {
-      const authPath = path.join(process.cwd(), '.wwebjs_auth');
-      if (fs.existsSync(authPath)) {
-        fs.rmSync(authPath, { recursive: true, force: true });
-      }
-    } catch (e) {
-      console.log('Error clearing auth directory (this is usually fine, it means chrome is still running in background):', e.message);
-    }
-
-    initializeWhatsApp();
-  }, 4000);
-  
-  return true;
-};
-
 export const initializeWhatsApp = () => {
   // Clear stale lockfiles to prevent EBUSY crash on VPS restarts
   try {
@@ -78,21 +35,20 @@ export const initializeWhatsApp = () => {
     authStrategy: new LocalAuth(),
     puppeteer: {
       headless: true,
+      // Use the bundled Chromium on non‑Windows or when the custom Chrome path is missing.
       ...(process.env.WHATSAPP_CHROME_PATH && fs.existsSync(process.env.WHATSAPP_CHROME_PATH)
         ? { executablePath: process.env.WHATSAPP_CHROME_PATH }
         : {}),
-      args: [
-        '--no-sandbox', 
-        '--disable-setuid-sandbox', 
-        '--disable-extensions', 
-        '--disable-dev-shm-usage', 
-        '--disable-gpu',
-        '--disable-features=IsolateOrigins,site-per-process',
-        '--disable-site-isolation-trials'
-      ]
+      // Server stability args
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-extensions', '--disable-dev-shm-usage', '--disable-gpu']
+    }, // end puppeteer config
+    // Fix for "Runtime.callFunctionOn timed out" / "Execution context was destroyed"
+    webVersionCache: {
+      type: 'remote',
+      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
     },
-    authTimeoutMs: 120000, // Increased to 2 mins for slow VPS
-    qrMaxRetries: 10 // Give more chances to scan before disconnecting
+    authTimeoutMs: 60000,
+    qrMaxRetries: 3
   });
 
   let pairingCodeRequested = false;
@@ -105,28 +61,18 @@ export const initializeWhatsApp = () => {
     
     if (pairingNumber && !pairingCodeRequested) {
       pairingCodeRequested = true;
-      console.log(`\n📲 Waiting 3 seconds before requesting pairing code for: ${pairingNumber}...`);
-      
-      setTimeout(async () => {
-        try {
-          const code = await waClient.requestPairingCode(pairingNumber);
-          console.log('\n======================================================');
-          console.log(`🔑 YOUR PAIRING CODE IS: ${code} 🔑`);
-          console.log('Open WhatsApp > Linked Devices > Link with phone number instead');
-          console.log('======================================================\n');
-          waStatus = 'pairing_code_ready';
-          latestQr = `PAIRING_CODE:${code}`;
-        } catch (err) {
-          console.error('❌ Failed to request pairing code:', err.message || err);
-          console.log('⚠️ Falling back to QR Code...');
-          console.log('\n\n======================================================');
-          console.log('📱 SCAN THIS QR CODE IN WHATSAPP TO LINK YOUR ACCOUNT 📱');
-          console.log('======================================================\n');
-          qrcode.generate(qr, { small: true });
-          waStatus = 'qr_ready';
-        }
-      }, 3000);
-      
+      console.log(`\n📲 Requesting pairing code for: ${pairingNumber}`);
+      try {
+        const code = await waClient.requestPairingCode(pairingNumber);
+        console.log('\n======================================================');
+        console.log(`🔑 YOUR PAIRING CODE IS: ${code} 🔑`);
+        console.log('Open WhatsApp > Linked Devices > Link with phone number instead');
+        console.log('======================================================\n');
+        waStatus = 'pairing_code_ready';
+        latestQr = `PAIRING_CODE:${code}`;
+      } catch (err) {
+        console.error('❌ Failed to request pairing code:', err);
+      }
     } else if (!pairingNumber) {
       console.log('\n\n======================================================');
       console.log('📱 SCAN THIS QR CODE IN WHATSAPP TO LINK YOUR ACCOUNT 📱');
@@ -318,24 +264,7 @@ const shutdownWhatsApp = async () => {
   if (waClient) {
     console.log('Shutting down WhatsApp client...');
     try {
-      let browserPid = null;
-      if (waClient.pupBrowser && waClient.pupBrowser.process) {
-        const proc = waClient.pupBrowser.process();
-        if (proc) browserPid = proc.pid;
-      }
-      
       await waClient.destroy();
-      
-      // Force kill the specific chrome process if it's still lingering
-      if (browserPid) {
-        try {
-          process.kill(browserPid, 'SIGKILL');
-          console.log(`Force killed lingering Chrome process (PID: ${browserPid})`);
-        } catch (e) {
-          // Process might already be dead, ignore
-        }
-      }
-      
       console.log('WhatsApp client shut down gracefully.');
     } catch (err) {
       console.log('Error shutting down WhatsApp client:', err.message);
@@ -348,4 +277,30 @@ const shutdownWhatsApp = async () => {
 process.on('SIGINT', shutdownWhatsApp);
 process.on('SIGTERM', shutdownWhatsApp);
 process.on('SIGUSR2', shutdownWhatsApp); // For nodemon
+
+export const restartWhatsApp = async () => {
+  console.log('🔄 Manual restart requested...');
+  waStatus = 'initializing';
+  if (waClient) {
+    try {
+      await waClient.destroy();
+    } catch (e) {
+      console.log('Error destroying client on manual restart:', e.message);
+    }
+  }
+  
+  try {
+    const authPath = path.join(process.cwd(), '.wwebjs_auth');
+    if (fs.existsSync(authPath)) {
+      fs.rmSync(authPath, { recursive: true, force: true });
+    }
+  } catch (e) {
+    console.log('Error clearing auth directory:', e.message);
+  }
+  
+  setTimeout(() => {
+    initializeWhatsApp();
+  }, 2000);
+  return { success: true, message: 'WhatsApp client is restarting...' };
+};
 

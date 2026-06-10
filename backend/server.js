@@ -63,8 +63,8 @@ app.get('/api/whatsapp/status', (req, res) => {
 // WhatsApp Restart
 app.post('/api/whatsapp/restart', async (req, res) => {
   try {
-    await restartWhatsApp();
-    res.json({ success: true, message: 'WhatsApp client is restarting...' });
+    const result = await restartWhatsApp();
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

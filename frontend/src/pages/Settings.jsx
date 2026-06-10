@@ -40,11 +40,9 @@ const Settings = () => {
   const handleRestart = async () => {
     try {
       setWaStatus('initializing');
-      setQrCode(null);
       await fetch(`${API_BASE_URL}/api/whatsapp/restart`, { method: 'POST' });
     } catch (err) {
-      console.error('Error restarting WhatsApp:', err);
-      setError('Failed to restart client');
+      console.error('Failed to restart WhatsApp', err);
     }
   };
 
@@ -66,21 +64,10 @@ const Settings = () => {
           <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2>WhatsApp Integration</h2>
             <button 
-              onClick={handleRestart}
-              style={{
-                padding: '8px 16px',
-                background: 'var(--primary)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontWeight: '600',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
+              onClick={handleRestart} 
+              className="btn btn-primary"
+              style={{ padding: '8px 16px', fontSize: '14px' }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
               Regenerate Code
             </button>
           </div>
