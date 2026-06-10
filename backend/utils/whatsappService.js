@@ -36,6 +36,7 @@ export const initializeWhatsApp = () => {
     authStrategy: new LocalAuth(),
     puppeteer: {
       headless: true,
+      protocolTimeout: 300000,
       // Use the bundled Chromium on non‑Windows or when the custom Chrome path is missing.
       ...(process.env.WHATSAPP_CHROME_PATH && fs.existsSync(process.env.WHATSAPP_CHROME_PATH)
         ? { executablePath: process.env.WHATSAPP_CHROME_PATH }
