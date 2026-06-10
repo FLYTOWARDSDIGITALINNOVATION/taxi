@@ -87,10 +87,10 @@ export const initializeWhatsApp = () => {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-extensions', '--disable-dev-shm-usage', '--disable-gpu']
     }, // end puppeteer config
     // Fix for "Runtime.callFunctionOn timed out" / "Execution context was destroyed"
-    webVersionCache: {
-      type: 'remote',
-      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
-    },
+    // webVersionCache: {
+    //   type: 'remote',
+    //   remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+    // },
     authTimeoutMs: 60000,
     qrMaxRetries: 3
   });
@@ -105,20 +105,34 @@ export const initializeWhatsApp = () => {
     
     if (pairingNumber && !pairingCodeRequested) {
       pairingCodeRequested = true;
-      console.log(`\n📲 Waiting 3 seconds for WhatsApp to load before requesting code...`);
-      try {
-        // Delay 3 seconds so WhatsApp internal modules load fully, preventing "t: t" evaluation errors
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        console.log(`\n📲 Requesting pairing code for: ${pairingNumber}`);
-        const code = await waClient.requestPairingCode(pairingNumber);
+      console.log(`\n📲 Preparing to request pairing code for: ${pairingNumber}...`);
+      
+      let code = null;
+      let retries = 5;
+      
+      // Retry loop: Sometimes WhatsApp internal JS takes time to load.
+      while (retries > 0) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          code = await waClient.requestPairingCode(pairingNumber);
+          break; // Success!
+        } catch (err) {
+          console.log(`⏳ WhatsApp web modules still loading... Retrying (${retries - 1} attempts left)`);
+          retries--;
+        }
+      }
+
+      if (code) {
         console.log('\n======================================================');
         console.log(`🔑 YOUR PAIRING CODE IS: ${code} 🔑`);
         console.log('Open WhatsApp > Linked Devices > Link with phone number instead');
         console.log('======================================================\n');
         waStatus = 'pairing_code_ready';
         latestQr = `PAIRING_CODE:${code}`;
-      } catch (err) {
-        console.error('❌ Failed to request pairing code:', err);
+      } else {
+        console.error('❌ Failed to generate pairing code. Falling back to QR code.');
+        waStatus = 'qr_ready';
+        qrcode.generate(qr, { small: true });
       }
     } else if (!pairingNumber) {
       console.log('\n\n======================================================');
