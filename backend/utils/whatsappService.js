@@ -81,7 +81,15 @@ export const initializeWhatsApp = () => {
       ...(process.env.WHATSAPP_CHROME_PATH && fs.existsSync(process.env.WHATSAPP_CHROME_PATH)
         ? { executablePath: process.env.WHATSAPP_CHROME_PATH }
         : {}),
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-extensions', '--disable-dev-shm-usage', '--disable-gpu']
+      args: [
+        '--no-sandbox', 
+        '--disable-setuid-sandbox', 
+        '--disable-extensions', 
+        '--disable-dev-shm-usage', 
+        '--disable-gpu',
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--disable-site-isolation-trials'
+      ]
     },
     authTimeoutMs: 120000, // Increased to 2 mins for slow VPS
     qrMaxRetries: 10 // Give more chances to scan before disconnecting
