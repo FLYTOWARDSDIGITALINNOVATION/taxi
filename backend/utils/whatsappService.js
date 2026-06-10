@@ -23,10 +23,11 @@ export const getWhatsAppStatus = () => {
 export const initializeWhatsApp = () => {
   // Clear stale lockfiles to prevent EBUSY crash on VPS restarts
   try {
-    const lockfile = path.join(process.cwd(), '.wwebjs_auth', 'session', 'lockfile');
-    const singleton = path.join(process.cwd(), '.wwebjs_auth', 'session', 'SingletonLock');
-    if (fs.existsSync(lockfile)) fs.unlinkSync(lockfile);
-    if (fs.existsSync(singleton)) fs.unlinkSync(singleton);
+    const sessionPath = path.join(process.cwd(), '.wwebjs_auth', 'session');
+    fs.rmSync(path.join(sessionPath, 'lockfile'), { force: true });
+    fs.rmSync(path.join(sessionPath, 'SingletonLock'), { force: true });
+    fs.rmSync(path.join(sessionPath, 'SingletonCookie'), { force: true });
+    fs.rmSync(path.join(sessionPath, 'SingletonSocket'), { force: true });
   } catch (e) {
     console.log('[WhatsApp Warning] Could not remove lock files:', e.message);
   }
