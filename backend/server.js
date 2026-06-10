@@ -6,7 +6,7 @@ import { Booking } from './models/Booking.js';
 import { Driver } from './models/Driver.js';
 import { Taxi } from './models/Taxi.js';
 import { Message } from './models/Message.js';
-import { sendCustomerNotification, sendDriverNotification, sendTripClosedMessage, sendBookingConfirmedMessage, initializeWhatsApp, getWhatsAppStatus } from './utils/whatsappService.js';
+import { sendCustomerNotification, sendDriverNotification, sendTripClosedMessage, sendBookingConfirmedMessage, initializeWhatsApp, getWhatsAppStatus, restartWhatsApp } from './utils/whatsappService.js';
 
 
 dotenv.config();
@@ -55,6 +55,17 @@ app.get('/api/whatsapp/status', (req, res) => {
   try {
     const status = getWhatsAppStatus();
     res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// WhatsApp Restart
+app.post('/api/whatsapp/restart', async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+    await restartWhatsApp(phoneNumber);
+    res.json({ success: true, message: 'WhatsApp client is restarting...' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

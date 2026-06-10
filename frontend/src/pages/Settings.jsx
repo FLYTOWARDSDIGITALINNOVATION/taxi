@@ -8,6 +8,7 @@ const Settings = () => {
   const [waStatus, setWaStatus] = useState('initializing');
   const [qrCode, setQrCode] = useState(null);
   const [error, setError] = useState(null);
+  const [phoneNumberInput, setPhoneNumberInput] = useState('');
 
   useEffect(() => {
     let intervalId;
@@ -37,6 +38,21 @@ const Settings = () => {
     return () => clearInterval(intervalId);
   }, []);
 
+  const handleRestart = async () => {
+    try {
+      setWaStatus('initializing');
+      setQrCode(null);
+      await fetch(`${API_BASE_URL}/api/whatsapp/restart`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: phoneNumberInput })
+      });
+    } catch (err) {
+      console.error('Error restarting WhatsApp:', err);
+      setError('Failed to restart client');
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -52,8 +68,41 @@ const Settings = () => {
 
       <div className="content-grid" style={{ gridTemplateColumns: '1fr' }}>
         <div className="card">
-          <div className="card-header">
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
             <h2>WhatsApp Integration</h2>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input 
+                type="text" 
+                placeholder="Ex: 919876543210" 
+                value={phoneNumberInput}
+                onChange={(e) => setPhoneNumberInput(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  outline: 'none',
+                  minWidth: '200px'
+                }}
+              />
+              <button 
+                onClick={handleRestart}
+                style={{
+                  padding: '8px 16px',
+                  background: 'var(--primary)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                Regenerate Code
+              </button>
+            </div>
           </div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px', textAlign: 'center' }}>
             
@@ -68,6 +117,24 @@ const Settings = () => {
                 <Loader2 size={48} className="spin" />
                 <h3>Initializing WhatsApp Client</h3>
                 <p>Please wait while we connect to the WhatsApp network...</p>
+              </div>
+            ) : waStatus === 'pairing_code_ready' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
+                <div style={{ background: 'white', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                  <h1 style={{ fontSize: '48px', letterSpacing: '4px', margin: 0, color: 'var(--primary)' }}>
+                    {qrCode ? qrCode.replace('PAIRING_CODE:', '') : '...'}
+                  </h1>
+                </div>
+                <div style={{ maxWidth: '400px' }}>
+                  <h3 style={{ marginBottom: '8px', fontSize: '20px', color: 'var(--text-primary)' }}>Link Your Account (Phone Number)</h3>
+                  <ol style={{ textAlign: 'left', color: 'var(--text-secondary)', lineHeight: '1.6', paddingLeft: '20px' }}>
+                    <li>Open WhatsApp on your phone</li>
+                    <li>Tap <strong>Menu</strong> or <strong>Settings</strong> and select <strong>Linked Devices</strong></li>
+                    <li>Tap on <strong>Link a Device</strong></li>
+                    <li>Tap <strong>Link with phone number instead</strong> at the bottom</li>
+                    <li>Enter the 8-character code shown above</li>
+                  </ol>
+                </div>
               </div>
             ) : waStatus === 'qr_ready' ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
