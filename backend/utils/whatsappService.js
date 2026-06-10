@@ -20,13 +20,7 @@ export const getWhatsAppStatus = () => {
   return { status: waStatus, qr: latestQr };
 };
 
-let dynamicPairingNumber = null;
-
-export const restartWhatsApp = async (phoneNumber) => {
-  if (phoneNumber) {
-    dynamicPairingNumber = phoneNumber;
-  }
-  
+export const restartWhatsApp = async () => {
   console.log('🔄 Manual WhatsApp restart requested...');
   waStatus = 'initializing';
   latestQr = null;
@@ -34,20 +28,13 @@ export const restartWhatsApp = async (phoneNumber) => {
 
   if (waClient) {
     try {
-      // Forcefully kill the specific background Chrome process to release file locks
-      if (waClient.pupBrowser) {
-        const browserProcess = waClient.pupBrowser.process();
-        if (browserProcess) {
-          browserProcess.kill('SIGKILL');
-        }
-      }
       await waClient.destroy();
     } catch (e) {
       console.log('Error destroying client:', e.message);
     }
   }
   
-  // Give Windows 4 seconds to fully kill the chrome.exe process before deleting files
+  // Give Windows 3 seconds to fully kill the chrome.exe process before deleting files
   setTimeout(() => {
     try {
       const authPath = path.join(process.cwd(), '.wwebjs_auth');
@@ -87,10 +74,10 @@ export const initializeWhatsApp = () => {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-extensions', '--disable-dev-shm-usage', '--disable-gpu']
     }, // end puppeteer config
     // Fix for "Runtime.callFunctionOn timed out" / "Execution context was destroyed"
-    // webVersionCache: {
-    //   type: 'remote',
-    //   remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
-    // },
+    webVersionCache: {
+      type: 'remote',
+      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+    },
     authTimeoutMs: 60000,
     qrMaxRetries: 3
   });
@@ -101,39 +88,32 @@ export const initializeWhatsApp = () => {
     latestQr = qr;
     waStatus = 'qr_ready';
     
-    const pairingNumber = dynamicPairingNumber || process.env.WHATSAPP_PAIRING_NUMBER;
+    const pairingNumber = process.env.WHATSAPP_PAIRING_NUMBER;
     
     if (pairingNumber && !pairingCodeRequested) {
       pairingCodeRequested = true;
-      console.log(`\n📲 Preparing to request pairing code for: ${pairingNumber}...`);
+      console.log(`\n📲 Waiting 3 seconds before requesting pairing code for: ${pairingNumber}...`);
       
-      let code = null;
-      let retries = 5;
-      
-      // Retry loop: Sometimes WhatsApp internal JS takes time to load.
-      while (retries > 0) {
+      setTimeout(async () => {
         try {
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          code = await waClient.requestPairingCode(pairingNumber);
-          break; // Success!
+          const code = await waClient.requestPairingCode(pairingNumber);
+          console.log('\n======================================================');
+          console.log(`🔑 YOUR PAIRING CODE IS: ${code} 🔑`);
+          console.log('Open WhatsApp > Linked Devices > Link with phone number instead');
+          console.log('======================================================\n');
+          waStatus = 'pairing_code_ready';
+          latestQr = `PAIRING_CODE:${code}`;
         } catch (err) {
-          console.log(`⏳ WhatsApp web modules still loading... Retrying (${retries - 1} attempts left)`);
-          retries--;
+          console.error('❌ Failed to request pairing code:', err.message || err);
+          console.log('⚠️ Falling back to QR Code...');
+          console.log('\n\n======================================================');
+          console.log('📱 SCAN THIS QR CODE IN WHATSAPP TO LINK YOUR ACCOUNT 📱');
+          console.log('======================================================\n');
+          qrcode.generate(qr, { small: true });
+          waStatus = 'qr_ready';
         }
-      }
-
-      if (code) {
-        console.log('\n======================================================');
-        console.log(`🔑 YOUR PAIRING CODE IS: ${code} 🔑`);
-        console.log('Open WhatsApp > Linked Devices > Link with phone number instead');
-        console.log('======================================================\n');
-        waStatus = 'pairing_code_ready';
-        latestQr = `PAIRING_CODE:${code}`;
-      } else {
-        console.error('❌ Failed to generate pairing code. Falling back to QR code.');
-        waStatus = 'qr_ready';
-        qrcode.generate(qr, { small: true });
-      }
+      }, 3000);
+      
     } else if (!pairingNumber) {
       console.log('\n\n======================================================');
       console.log('📱 SCAN THIS QR CODE IN WHATSAPP TO LINK YOUR ACCOUNT 📱');

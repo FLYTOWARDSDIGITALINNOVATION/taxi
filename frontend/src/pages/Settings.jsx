@@ -8,7 +8,6 @@ const Settings = () => {
   const [waStatus, setWaStatus] = useState('initializing');
   const [qrCode, setQrCode] = useState(null);
   const [error, setError] = useState(null);
-  const [phoneNumberInput, setPhoneNumberInput] = useState('');
 
   useEffect(() => {
     let intervalId;
@@ -42,11 +41,7 @@ const Settings = () => {
     try {
       setWaStatus('initializing');
       setQrCode(null);
-      await fetch(`${API_BASE_URL}/api/whatsapp/restart`, { 
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber: phoneNumberInput })
-      });
+      await fetch(`${API_BASE_URL}/api/whatsapp/restart`, { method: 'POST' });
     } catch (err) {
       console.error('Error restarting WhatsApp:', err);
       setError('Failed to restart client');
@@ -68,41 +63,26 @@ const Settings = () => {
 
       <div className="content-grid" style={{ gridTemplateColumns: '1fr' }}>
         <div className="card">
-          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2>WhatsApp Integration</h2>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input 
-                type="text" 
-                placeholder="Ex: 919876543210" 
-                value={phoneNumberInput}
-                onChange={(e) => setPhoneNumberInput(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--border-color)',
-                  outline: 'none',
-                  minWidth: '200px'
-                }}
-              />
-              <button 
-                onClick={handleRestart}
-                style={{
-                  padding: '8px 16px',
-                  background: 'var(--primary)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                Regenerate Code
-              </button>
-            </div>
+            <button 
+              onClick={handleRestart}
+              style={{
+                padding: '8px 16px',
+                background: 'var(--primary)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              Regenerate Code
+            </button>
           </div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px', textAlign: 'center' }}>
             
