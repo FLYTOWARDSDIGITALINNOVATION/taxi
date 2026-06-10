@@ -28,7 +28,19 @@ export const restartWhatsApp = async () => {
 
   if (waClient) {
     try {
+      let browserPid = null;
+      if (waClient.pupBrowser && waClient.pupBrowser.process) {
+        const proc = waClient.pupBrowser.process();
+        if (proc) browserPid = proc.pid;
+      }
+
       await waClient.destroy();
+
+      if (browserPid) {
+        try {
+          process.kill(browserPid, 'SIGKILL');
+        } catch (e) {}
+      }
     } catch (e) {
       console.log('Error destroying client:', e.message);
     }
@@ -305,7 +317,24 @@ const shutdownWhatsApp = async () => {
   if (waClient) {
     console.log('Shutting down WhatsApp client...');
     try {
+      let browserPid = null;
+      if (waClient.pupBrowser && waClient.pupBrowser.process) {
+        const proc = waClient.pupBrowser.process();
+        if (proc) browserPid = proc.pid;
+      }
+      
       await waClient.destroy();
+      
+      // Force kill the specific chrome process if it's still lingering
+      if (browserPid) {
+        try {
+          process.kill(browserPid, 'SIGKILL');
+          console.log(`Force killed lingering Chrome process (PID: ${browserPid})`);
+        } catch (e) {
+          // Process might already be dead, ignore
+        }
+      }
+      
       console.log('WhatsApp client shut down gracefully.');
     } catch (err) {
       console.log('Error shutting down WhatsApp client:', err.message);
