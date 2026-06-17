@@ -22,7 +22,12 @@ const messageSchema = new mongoose.Schema({
   km: { type: Number },
   duration: { type: String },
   total: { type: Number },
-  sentAt: { type: Date, default: Date.now }
+  sentAt: { type: Date, default: Date.now },
+  // Twilio status tracking
+  twilioSid: { type: String },
+  status: { type: String, default: 'pending' },
+  errorCode: { type: Number },
+  errorMessage: { type: String }
 });
 
 export const Message = mongoose.model('Message', messageSchema);

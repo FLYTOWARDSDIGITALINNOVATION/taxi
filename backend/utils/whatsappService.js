@@ -1,153 +1,69 @@
-import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg;
-import qrcode from 'qrcode-terminal';
+import twilio from 'twilio';
 import { Message } from '../models/Message.js';
-import fs from 'fs';
-import path from 'path';
 
-/**
- * Message Notification Service (Free WhatsApp Integration)
- * Logs all messages to the database for the in-app message inbox.
- * Sends real messages via WhatsApp Web API.
- */
-
-let waClient = null;
-let isWaConnected = false;
-let latestQr = null;
-let waStatus = 'initializing'; // initializing, qr_ready, connected, disconnected
-
-export const getWhatsAppStatus = () => {
-  return { status: waStatus, qr: latestQr };
-};
+let accountSid = null;
+let authToken = null;
+let twilioFrom = 'whatsapp:+14155238886';
+let twilioClient = null;
 
 export const initializeWhatsApp = () => {
-  // Clear stale lockfiles to prevent EBUSY crash on VPS restarts
-  try {
-    const sessionPath = path.join(process.cwd(), '.wwebjs_auth', 'session');
-    fs.rmSync(path.join(sessionPath, 'lockfile'), { force: true });
-    fs.rmSync(path.join(sessionPath, 'SingletonLock'), { force: true });
-    fs.rmSync(path.join(sessionPath, 'SingletonCookie'), { force: true });
-    fs.rmSync(path.join(sessionPath, 'SingletonSocket'), { force: true });
-  } catch (e) {
-    console.log('[WhatsApp Warning] Could not remove lock files:', e.message);
+  accountSid = process.env.TWILIO_ACCOUNT_SID;
+  authToken = process.env.TWILIO_AUTH_TOKEN;
+  twilioFrom = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
+
+  console.log('🤖 Initializing Twilio WhatsApp Service...');
+  if (!accountSid || !authToken) {
+    console.error('❌ Twilio configuration missing! Please check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in your .env file.');
+    twilioClient = null;
+  } else {
+    try {
+      twilioClient = twilio(accountSid, authToken);
+      console.log('✅ Twilio WhatsApp Service configured successfully!');
+      console.log(`📤 Sender: ${twilioFrom}`);
+    } catch (error) {
+      console.error('❌ Error initializing Twilio client:', error.message);
+      twilioClient = null;
+    }
   }
-
-  waClient = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-      headless: true,
-      protocolTimeout: 300000,
-      // Use the bundled Chromium on non‑Windows or when the custom Chrome path is missing.
-      ...(process.env.WHATSAPP_CHROME_PATH && fs.existsSync(process.env.WHATSAPP_CHROME_PATH)
-        ? { executablePath: process.env.WHATSAPP_CHROME_PATH }
-        : {}),
-      // Server stability args
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-extensions', '--disable-dev-shm-usage', '--disable-gpu']
-    }, // end puppeteer config
-    // Fix for "Runtime.callFunctionOn timed out" / "Execution context was destroyed"
-    webVersionCache: {
-      type: 'remote',
-      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
-    },
-    authTimeoutMs: 60000,
-    qrMaxRetries: 3
-  });
-
-  let pairingCodeRequested = false;
-
-  waClient.on('qr', async (qr) => {
-    latestQr = qr;
-    waStatus = 'qr_ready';
-    
-    const pairingNumber = process.env.WHATSAPP_PAIRING_NUMBER;
-    
-    if (pairingNumber && !pairingCodeRequested) {
-      pairingCodeRequested = true;
-      console.log(`\n📲 Requesting pairing code for: ${pairingNumber}`);
-      try {
-        const code = await waClient.requestPairingCode(pairingNumber);
-        console.log('\n======================================================');
-        console.log(`🔑 YOUR PAIRING CODE IS: ${code} 🔑`);
-        console.log('Open WhatsApp > Linked Devices > Link with phone number instead');
-        console.log('======================================================\n');
-        waStatus = 'pairing_code_ready';
-        latestQr = `PAIRING_CODE:${code}`;
-      } catch (err) {
-        console.error('❌ Failed to request pairing code:', err);
-      }
-    } else if (!pairingNumber) {
-      console.log('\n\n======================================================');
-      console.log('📱 SCAN THIS QR CODE IN WHATSAPP TO LINK YOUR ACCOUNT 📱');
-      console.log('======================================================\n');
-      qrcode.generate(qr, { small: true });
-    }
-  });
-
-  waClient.on('ready', () => {
-    isWaConnected = true;
-    waStatus = 'connected';
-    latestQr = null;
-    console.log('\n✅ WhatsApp Client is READY and linked!');
-  });
-
-  waClient.on('authenticated', () => {
-    console.log('✅ WhatsApp Authenticated!');
-  });
-
-  waClient.on('auth_failure', msg => {
-    console.error('❌ WhatsApp Authentication failure', msg);
-  });
-
-  waClient.on('disconnected', async (reason) => {
-    console.log('❌ WhatsApp Client was disconnected', reason);
-    isWaConnected = false;
-    waStatus = 'disconnected';
-    latestQr = null;
-
-    // Destroy current client
-    try {
-      await waClient.destroy();
-    } catch (e) {
-      console.log('Error destroying client on disconnect:', e.message);
-    }
-
-    // Force clear the entire session directory to ensure a fresh QR code
-    try {
-      const authPath = path.join(process.cwd(), '.wwebjs_auth');
-      if (fs.existsSync(authPath)) {
-        fs.rmSync(authPath, { recursive: true, force: true });
-      }
-    } catch (e) {
-      console.log('Error clearing auth directory:', e.message);
-    }
-
-    // Fast restart to show QR immediately
-    setTimeout(() => {
-      console.log('🔄 Re-initializing WhatsApp to get new QR code...');
-      initializeWhatsApp();
-    }, 2000);
-  });
-
-  waClient.initialize().catch(err => {
-    console.error('❌ WhatsApp Initialization Error:', err);
-    waStatus = 'disconnected';
-  });
 };
 
-const formatPhone = (phone) => {
+export const getWhatsAppStatus = () => {
+  if (!twilioClient) {
+    return {
+      status: 'disconnected',
+      provider: 'twilio',
+      twilioNumber: twilioFrom,
+      error: 'Twilio client not initialized. Check credentials.'
+    };
+  }
+  return {
+    status: 'twilio_ready',
+    provider: 'twilio',
+    twilioNumber: twilioFrom,
+    accountSid: accountSid ? `${accountSid.substring(0, 6)}...${accountSid.substring(accountSid.length - 6)}` : null
+  };
+};
+
+export const restartWhatsApp = async () => {
+  console.log('🔄 Re-verifying Twilio configuration...');
+  initializeWhatsApp();
+  return { success: true, message: 'Twilio WhatsApp integration status updated.' };
+};
+
+const formatTwilioPhone = (phone) => {
   if (!phone) return null;
   let clean = phone.replace(/\D/g, '');
-  if (!clean.startsWith('91')) {
+  if (clean.length === 10) {
     clean = '91' + clean;
   }
-  return `${clean}@c.us`;
+  return `whatsapp:+${clean}`;
 };
 
 // ── Booking Confirmed (sent to customer) ──────────────────────────────────────
 export const sendBookingConfirmedMessage = async ({ bookingId, customerName, customerPhone, pickup, drop, date, vehicleType }) => {
   const body = `Hi ${customerName}, your Nanban Taxi booking is confirmed.\nPickup: ${pickup}\nDrop: ${drop}\nDate/Time: ${date}\nVehicle Type: ${vehicleType}\nThank you for choosing Nanban Taxi +91 9600989735.`;
 
-  await Message.create({
+  const msg = await Message.create({
     bookingId,
     recipient: 'customer',
     recipientName: customerName,
@@ -161,7 +77,14 @@ export const sendBookingConfirmedMessage = async ({ bookingId, customerName, cus
   });
 
   console.log(`[MSG] Booking Confirmed → ${customerName} (${customerPhone})`);
-  _tryWhatsApp(formatPhone(customerPhone), body);
+  const twilioRes = await _tryWhatsApp(formatTwilioPhone(customerPhone), body);
+  if (twilioRes) {
+    msg.twilioSid = twilioRes.twilioSid;
+    msg.status = twilioRes.status;
+    msg.errorCode = twilioRes.errorCode;
+    msg.errorMessage = twilioRes.errorMessage;
+    await msg.save();
+  }
   return true;
 };
 
@@ -174,7 +97,7 @@ export const sendCustomerNotification = async (booking, taxi, driver) => {
 
   const body = `Hello ${booking.customer}, your trip from ${booking.pickup} to ${booking.drop} has been assigned.\nDriver: ${driver.name} (${driver.phone}).\n- Nanban Taxi`;
 
-  await Message.create({
+  const msg = await Message.create({
     bookingId: booking.bookingId,
     recipient: 'customer',
     recipientName: booking.customer,
@@ -190,7 +113,14 @@ export const sendCustomerNotification = async (booking, taxi, driver) => {
   });
 
   console.log(`[MSG] Trip Assigned (Customer) → ${booking.customer} (${booking.phone})`);
-  _tryWhatsApp(formatPhone(booking.phone), body);
+  const twilioRes = await _tryWhatsApp(formatTwilioPhone(booking.phone), body);
+  if (twilioRes) {
+    msg.twilioSid = twilioRes.twilioSid;
+    msg.status = twilioRes.status;
+    msg.errorCode = twilioRes.errorCode;
+    msg.errorMessage = twilioRes.errorMessage;
+    await msg.save();
+  }
   return true;
 };
 
@@ -202,7 +132,7 @@ export const sendDriverNotification = async (booking, taxi, driver) => {
 
   const body = `Trip Assigned:\nCustomer: ${booking.customer} (${booking.phone})\nPickup: ${booking.pickup}\nDrop: ${booking.drop}\nTime: ${dateStr}`;
 
-  await Message.create({
+  const msg = await Message.create({
     bookingId: booking.bookingId,
     recipient: 'driver',
     recipientName: driver.name,
@@ -218,7 +148,14 @@ export const sendDriverNotification = async (booking, taxi, driver) => {
   });
 
   console.log(`[MSG] Trip Assigned (Driver) → ${driver.name} (${driver.phone})`);
-  _tryWhatsApp(formatPhone(driver.phone), body);
+  const twilioRes = await _tryWhatsApp(formatTwilioPhone(driver.phone), body);
+  if (twilioRes) {
+    msg.twilioSid = twilioRes.twilioSid;
+    msg.status = twilioRes.status;
+    msg.errorCode = twilioRes.errorCode;
+    msg.errorMessage = twilioRes.errorMessage;
+    await msg.save();
+  }
   return true;
 };
 
@@ -226,7 +163,7 @@ export const sendDriverNotification = async (booking, taxi, driver) => {
 export const sendTripClosedMessage = async ({ bookingId, customerName, customerPhone, pickup, drop, km, duration, total }) => {
   const body = `Hi ${customerName}, your trip with Nanban Taxi is closed.\nKM: ${km}\nDuration: ${duration} hrs\nTotal: ₹${total}`;
 
-  await Message.create({
+  const msg = await Message.create({
     bookingId,
     recipient: 'customer',
     recipientName: customerName,
@@ -241,68 +178,96 @@ export const sendTripClosedMessage = async ({ bookingId, customerName, customerP
   });
 
   console.log(`[MSG] Trip Closed → ${customerName} (${customerPhone})`);
-  _tryWhatsApp(formatPhone(customerPhone), body);
+  const twilioRes = await _tryWhatsApp(formatTwilioPhone(customerPhone), body);
+  if (twilioRes) {
+    msg.twilioSid = twilioRes.twilioSid;
+    msg.status = twilioRes.status;
+    msg.errorCode = twilioRes.errorCode;
+    msg.errorMessage = twilioRes.errorMessage;
+    await msg.save();
+  }
   return true;
 };
 
 // ── Internal: send real WhatsApp message ──────────────────────────────────────
-async function _tryWhatsApp(chatId, body) {
-  if (!isWaConnected || !waClient) {
-    console.log(`[WhatsApp Warning] Message not sent. WhatsApp is not connected yet.`);
-    return;
+async function _tryWhatsApp(to, body) {
+  if (!twilioClient) {
+    console.log(`[Twilio Warning] Message not sent. Twilio is not initialized.`);
+    return null;
   }
-  if (!chatId) return;
+  if (!to) return null;
 
   try {
-    await waClient.sendMessage(chatId, body);
-    console.log(`✅ Real WhatsApp Message sent to ${chatId}`);
+    const res = await twilioClient.messages.create({
+      from: twilioFrom,
+      to: to,
+      body: body
+    });
+    console.log(`✅ Real WhatsApp Message sent via Twilio to ${to}. SID: ${res.sid}`);
+    return {
+      twilioSid: res.sid,
+      status: res.status,
+      errorCode: res.errorCode,
+      errorMessage: res.errorMessage
+    };
   } catch (err) {
-    console.error(`❌ Failed to send WhatsApp message to ${chatId}:`, err.message);
+    console.error(`❌ Failed to send WhatsApp message via Twilio to ${to}:`, err.message);
+    return {
+      status: 'failed',
+      errorCode: err.code || 500,
+      errorMessage: err.message
+    };
   }
 }
 
-// ── Handle VPS / Server Restart Lockfile cleanup ─────────────────────────────
-const shutdownWhatsApp = async () => {
-  if (waClient) {
-    console.log('Shutting down WhatsApp client...');
-    try {
-      await waClient.destroy();
-      console.log('WhatsApp client shut down gracefully.');
-    } catch (err) {
-      console.log('Error shutting down WhatsApp client:', err.message);
-    }
-  }
-  process.exit(0);
-};
+// ── Sync Message Statuses from Twilio ──────────────────────────────────────────
+export const updateMessageStatuses = async () => {
+  if (!twilioClient) return;
 
-// Graceful exit to prevent lockfile issues on VPS
-process.on('SIGINT', shutdownWhatsApp);
-process.on('SIGTERM', shutdownWhatsApp);
-process.on('SIGUSR2', shutdownWhatsApp); // For nodemon
-
-export const restartWhatsApp = async () => {
-  console.log('🔄 Manual restart requested...');
-  waStatus = 'initializing';
-  if (waClient) {
-    try {
-      await waClient.destroy();
-    } catch (e) {
-      console.log('Error destroying client on manual restart:', e.message);
-    }
-  }
-  
   try {
-    const authPath = path.join(process.cwd(), '.wwebjs_auth');
-    if (fs.existsSync(authPath)) {
-      fs.rmSync(authPath, { recursive: true, force: true });
-    }
-  } catch (e) {
-    console.log('Error clearing auth directory:', e.message);
-  }
-  
-  setTimeout(() => {
-    initializeWhatsApp();
-  }, 2000);
-  return { success: true, message: 'WhatsApp client is restarting...' };
-};
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const pendingMsgs = await Message.find({
+      sentAt: { $gte: cutoff },
+      twilioSid: { $exists: true, $ne: null },
+      status: { $in: ['pending', 'queued', 'sent', 'accepted'] }
+    }).limit(20);
 
+    if (pendingMsgs.length === 0) return;
+
+    console.log(`🔄 Syncing status for ${pendingMsgs.length} pending Twilio messages...`);
+    
+    for (const msg of pendingMsgs) {
+      try {
+        const twilioMsg = await twilioClient.messages(msg.twilioSid).fetch();
+        
+        let changed = false;
+        if (msg.status !== twilioMsg.status) {
+          msg.status = twilioMsg.status;
+          changed = true;
+        }
+        if (msg.errorCode !== twilioMsg.errorCode) {
+          msg.errorCode = twilioMsg.errorCode;
+          changed = true;
+        }
+        if (msg.errorMessage !== twilioMsg.errorMessage) {
+          msg.errorMessage = twilioMsg.errorMessage;
+          changed = true;
+        }
+        
+        if (changed) {
+          await msg.save();
+          console.log(`  Updated message ${msg.twilioSid}: status=${msg.status}, errorCode=${msg.errorCode || 'None'}`);
+        }
+      } catch (err) {
+        console.error(`  Error fetching Twilio status for ${msg.twilioSid}:`, err.message);
+        if (err.status === 404) {
+          msg.status = 'failed';
+          msg.errorMessage = 'Message not found on Twilio';
+          await msg.save();
+        }
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error during updateMessageStatuses:', error.message);
+  }
+};

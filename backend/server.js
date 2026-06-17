@@ -6,7 +6,7 @@ import { Booking } from './models/Booking.js';
 import { Driver } from './models/Driver.js';
 import { Taxi } from './models/Taxi.js';
 import { Message } from './models/Message.js';
-import { sendCustomerNotification, sendDriverNotification, sendTripClosedMessage, sendBookingConfirmedMessage, initializeWhatsApp, getWhatsAppStatus, restartWhatsApp } from './utils/whatsappService.js';
+import { sendCustomerNotification, sendDriverNotification, sendTripClosedMessage, sendBookingConfirmedMessage, initializeWhatsApp, getWhatsAppStatus, restartWhatsApp, updateMessageStatuses } from './utils/whatsappService.js';
 
 
 dotenv.config();
@@ -224,6 +224,13 @@ app.patch('/api/trips/:id/close', async (req, res) => {
 // ── MESSAGES INBOX ──────────────────────────────────────────────────────────
 app.get('/api/messages', async (req, res) => {
   try {
+    // Sync statuses from Twilio before fetching
+    try {
+      await updateMessageStatuses();
+    } catch (syncErr) {
+      console.error('Error syncing message statuses from Twilio:', syncErr.message);
+    }
+
     const { type, recipient, bookingId } = req.query;
     const filter = {};
     if (type) filter.messageType = type;

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { QRCodeSVG } from 'qrcode.react';
-import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, ShieldCheck, MessageSquare, Key, RefreshCw } from 'lucide-react';
 import API_BASE_URL from '../config';
 
 const Settings = () => {
   const [waStatus, setWaStatus] = useState('initializing');
-  const [qrCode, setQrCode] = useState(null);
+  const [twilioDetails, setTwilioDetails] = useState({ twilioNumber: '', accountSid: '', error: '' });
   const [error, setError] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     let intervalId;
@@ -20,29 +20,44 @@ const Settings = () => {
         }
         const data = await response.json();
         setWaStatus(data.status);
-        setQrCode(data.qr);
+        setTwilioDetails({
+          twilioNumber: data.twilioNumber || '',
+          accountSid: data.accountSid || '',
+          error: data.error || ''
+        });
         setError(null);
       } catch (err) {
         console.error('Error fetching WhatsApp status:', err);
-        setError('Unable to connect to server');
+        setError('Unable to connect to backend server');
       }
     };
 
-    // Fetch immediately
     fetchStatus();
-
-    // Poll every 3 seconds
-    intervalId = setInterval(fetchStatus, 3000);
+    intervalId = setInterval(fetchStatus, 5000); // Poll every 5s
 
     return () => clearInterval(intervalId);
   }, []);
 
   const handleRestart = async () => {
     try {
-      setWaStatus('initializing');
-      await fetch(`${API_BASE_URL}/api/whatsapp/restart`, { method: 'POST' });
+      setIsRefreshing(true);
+      const res = await fetch(`${API_BASE_URL}/api/whatsapp/restart`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        // Fetch status immediately to update UI
+        const statusRes = await fetch(`${API_BASE_URL}/api/whatsapp/status`);
+        const statusData = await statusRes.json();
+        setWaStatus(statusData.status);
+        setTwilioDetails({
+          twilioNumber: statusData.twilioNumber || '',
+          accountSid: statusData.accountSid || '',
+          error: statusData.error || ''
+        });
+      }
     } catch (err) {
-      console.error('Failed to restart WhatsApp', err);
+      console.error('Failed to restart WhatsApp service:', err);
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -60,86 +75,149 @@ const Settings = () => {
       </div>
 
       <div className="content-grid" style={{ gridTemplateColumns: '1fr' }}>
-        <div className="card">
-          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2>WhatsApp Integration</h2>
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(29, 161, 242, 0.1)', color: '#1da1f2' }}>
+                <MessageSquare size={20} />
+              </div>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '18px' }}>WhatsApp Twilio Integration</h2>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>Official Twilio WhatsApp Business API</p>
+              </div>
+            </div>
             <button 
               onClick={handleRestart} 
+              disabled={isRefreshing}
               className="btn btn-primary"
-              style={{ padding: '8px 16px', fontSize: '14px' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '14px' }}
             >
-              Regenerate Code
+              {isRefreshing ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
+              Verify Credentials
             </button>
           </div>
-          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px', textAlign: 'center' }}>
-            
+          
+          <div className="card-body" style={{ padding: '30px' }}>
             {error ? (
-              <div style={{ color: 'var(--danger)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+              <div style={{ color: 'var(--danger)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center', padding: '40px 0' }}>
                 <AlertCircle size={48} />
-                <h3>Connection Error</h3>
-                <p>{error}</p>
+                <h3 style={{ fontSize: '20px' }}>Connection Error</h3>
+                <p style={{ color: 'var(--text-secondary)' }}>{error}</p>
               </div>
             ) : waStatus === 'initializing' ? (
-              <div style={{ color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-                <Loader2 size={48} className="spin" />
-                <h3>Initializing WhatsApp Client</h3>
-                <p>Please wait while we connect to the WhatsApp network...</p>
+              <div style={{ color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', textAlign: 'center', padding: '40px 0' }}>
+                <Loader2 size={48} className="spin" style={{ color: 'var(--primary)' }} />
+                <h3>Initializing Twilio Service...</h3>
+                <p>Checking environment variables and initializing Twilio client.</p>
               </div>
-            ) : waStatus === 'pairing_code_ready' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
-                <div style={{ background: 'white', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                  <h1 style={{ fontSize: '48px', letterSpacing: '4px', margin: 0, color: 'var(--primary)' }}>
-                    {qrCode ? qrCode.replace('PAIRING_CODE:', '') : '...'}
-                  </h1>
+            ) : waStatus === 'twilio_ready' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+                {/* Status Callout Banner */}
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '16px', 
+                  background: 'rgba(16, 185, 129, 0.08)', 
+                  border: '1px solid rgba(16, 185, 129, 0.2)', 
+                  padding: '20px', 
+                  borderRadius: '12px' 
+                }}>
+                  <div style={{ padding: '10px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.15)', color: 'var(--success)' }}>
+                    <ShieldCheck size={28} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: '0 0 4px 0', fontSize: '16px', color: 'var(--success)', fontWeight: '600' }}>Service Operational</h4>
+                    <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)' }}>
+                      Twilio WhatsApp Client is online and successfully configured. Messages will send automatically.
+                    </p>
+                  </div>
                 </div>
-                <div style={{ maxWidth: '400px' }}>
-                  <h3 style={{ marginBottom: '8px', fontSize: '20px', color: 'var(--text-primary)' }}>Link Your Account (Phone Number)</h3>
-                  <ol style={{ textAlign: 'left', color: 'var(--text-secondary)', lineHeight: '1.6', paddingLeft: '20px' }}>
-                    <li>Open WhatsApp on your phone</li>
-                    <li>Tap <strong>Menu</strong> or <strong>Settings</strong> and select <strong>Linked Devices</strong></li>
-                    <li>Tap on <strong>Link a Device</strong></li>
-                    <li>Tap <strong>Link with phone number instead</strong> at the bottom</li>
-                    <li>Enter the 8-character code shown above</li>
-                  </ol>
-                </div>
-              </div>
-            ) : waStatus === 'qr_ready' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
-                <div style={{ background: 'white', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                  {qrCode ? (
-                    <QRCodeSVG value={qrCode} size={250} level="H" />
-                  ) : (
-                    <Loader2 size={48} className="spin" style={{ color: 'var(--primary)' }} />
-                  )}
-                </div>
-                <div style={{ maxWidth: '400px' }}>
-                  <h3 style={{ marginBottom: '8px', fontSize: '20px', color: 'var(--text-primary)' }}>Link Your Account</h3>
-                  <ol style={{ textAlign: 'left', color: 'var(--text-secondary)', lineHeight: '1.6', paddingLeft: '20px' }}>
-                    <li>Open WhatsApp on your phone</li>
-                    <li>Tap <strong>Menu</strong> or <strong>Settings</strong> and select <strong>Linked Devices</strong></li>
-                    <li>Tap on <strong>Link a Device</strong></li>
-                    <li>Point your phone to this screen to capture the QR code</li>
-                  </ol>
-                </div>
-              </div>
-            ) : waStatus === 'connected' ? (
-              <div style={{ color: 'var(--success)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-                <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <CheckCircle size={40} />
-                </div>
-                <h3>WhatsApp Connected</h3>
-                <p style={{ color: 'var(--text-secondary)' }}>Your WhatsApp account is successfully linked and ready to send notifications.</p>
-              </div>
-            ) : waStatus === 'disconnected' ? (
-              <div style={{ color: 'var(--warning)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-                <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(245, 158, 11, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <AlertCircle size={40} />
-                </div>
-                <h3>WhatsApp Disconnected</h3>
-                <p style={{ color: 'var(--text-secondary)' }}>The client was disconnected. Please wait for the service to restart and provide a new QR code.</p>
-              </div>
-            ) : null}
 
+                {/* Configuration Details Grid */}
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+                  gap: '20px',
+                  background: 'rgba(255,255,255,0.02)',
+                  padding: '24px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255,255,255,0.05)'
+                }}>
+                  <div>
+                    <span style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Twilio Account SID</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '500', color: 'var(--text-primary)' }}>
+                      <Key size={16} style={{ color: 'var(--primary)' }} />
+                      <code>{twilioDetails.accountSid || 'Not Configured'}</code>
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Sender WhatsApp ID</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '500', color: 'var(--text-primary)' }}>
+                      <MessageSquare size={16} style={{ color: 'var(--primary)' }} />
+                      <code>{twilioDetails.twilioNumber || 'Not Configured'}</code>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Instructions Box */}
+                <div style={{ 
+                  background: 'rgba(59, 130, 246, 0.05)', 
+                  border: '1px solid rgba(59, 130, 246, 0.15)', 
+                  padding: '24px', 
+                  borderRadius: '12px' 
+                }}>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: 'var(--text-primary)', fontWeight: '600' }}>
+                    📲 Twilio Sandbox Opt-in Instructions
+                  </h3>
+                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6', margin: '0 0 16px 0' }}>
+                    If you are using the Twilio WhatsApp Sandbox, your drivers and clients must opt-in to your Sandbox number before receiving notifications. Follow these instructions:
+                  </p>
+                  <ol style={{ textAlign: 'left', color: 'var(--text-secondary)', lineHeight: '1.7', paddingLeft: '20px', margin: 0 }}>
+                    <li style={{ marginBottom: '8px' }}>
+                      Ask your user (Client or Driver) to add the Sender Number <strong>{twilioDetails.twilioNumber || 'your Twilio number'}</strong> to their phone contacts.
+                    </li>
+                    <li>
+                      Instruct them to send the required Sandbox join command (e.g. <strong>join &lt;your-sandbox-keyword&gt;</strong>) as a message to that number in WhatsApp.
+                    </li>
+                  </ol>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '16px', 
+                  background: 'rgba(245, 158, 11, 0.08)', 
+                  border: '1px solid rgba(245, 158, 11, 0.2)', 
+                  padding: '20px', 
+                  borderRadius: '12px' 
+                }}>
+                  <div style={{ padding: '10px', borderRadius: '50%', background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warning)' }}>
+                    <AlertCircle size={28} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: '0 0 4px 0', fontSize: '16px', color: 'var(--warning)', fontWeight: '600' }}>Service Disconnected</h4>
+                    <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)' }}>
+                      Twilio client is not initialized. Please verify your credentials in the backend environment config.
+                    </p>
+                  </div>
+                </div>
+                {twilioDetails.error && (
+                  <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', padding: '16px', borderRadius: '8px', color: 'var(--danger)', fontSize: '14px' }}>
+                    <strong>Error:</strong> {twilioDetails.error}
+                  </div>
+                )}
+                <div style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                  <p style={{ margin: '0 0 12px 0' }}>Please ensure the following environment variables are correctly populated in your backend `.env` file:</p>
+                  <code style={{ display: 'block', background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px', fontSize: '13px' }}>
+                    TWILIO_ACCOUNT_SID=your_account_sid_here<br />
+                    TWILIO_AUTH_TOKEN=your_auth_token_here<br />
+                    TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+                  </code>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

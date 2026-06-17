@@ -19,9 +19,7 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.5.0",
-    "qrcode-terminal": "^0.12.0",
-    "twilio": "^6.0.0",
-    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#main"
+    "twilio": "^6.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

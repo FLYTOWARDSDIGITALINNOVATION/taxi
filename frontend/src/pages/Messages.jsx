@@ -172,10 +172,73 @@ const MessageBubble = ({ msg }) => {
         </AnimatePresence>
       </div>
 
-      {/* Tick mark */}
-      <div style={{ fontSize: '11px', color: '#10B981', marginTop: '3px',
-        alignSelf: isCustomer ? 'flex-start' : 'flex-end' }}>
-        ✓✓ Sent
+      {/* Status indicator */}
+      <div style={{ 
+        alignSelf: isCustomer ? 'flex-start' : 'flex-end',
+        width: '100%', 
+        display: 'flex', 
+        justifyContent: isCustomer ? 'flex-start' : 'flex-end',
+        marginTop: '3px'
+      }}>
+        {(() => {
+          const status = msg.status || 'sent';
+          const errorCode = msg.errorCode;
+
+          if (status === 'delivered' || status === 'read') {
+            return (
+              <div style={{ fontSize: '11px', color: '#10B981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>✓✓ Delivered</span>
+              </div>
+            );
+          }
+
+          if (errorCode === 63015) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%', maxWidth: '520px' }}>
+                <div style={{ fontSize: '11.5px', color: '#EF4444', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>⚠️ Delivery Failed (Sandbox Opt-in Required)</span>
+                </div>
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.04)',
+                  border: '1px solid rgba(239, 68, 68, 0.15)',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  fontSize: '12px',
+                  color: '#4B5563',
+                  lineHeight: '1.5',
+                  textAlign: 'left'
+                }}>
+                  <strong>How to fix:</strong> The recipient must opt-in to receive messages. Ask them to add your Twilio WhatsApp number to their contacts and send: <code>join &lt;sandbox-keyword&gt;</code> to it.
+                  <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '6px' }}>
+                    Go to <strong>Settings</strong> to find your Sandbox number and instructions.
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          if (status === 'failed' || status === 'undelivered') {
+            return (
+              <div style={{ fontSize: '11px', color: '#EF4444', fontWeight: '500' }}>
+                <span>❌ Failed {msg.errorMessage ? `(${msg.errorMessage})` : `(Error ${errorCode || 'Unknown'})`}</span>
+              </div>
+            );
+          }
+
+          if (status === 'queued' || status === 'accepted') {
+            return (
+              <div style={{ fontSize: '11px', color: '#3B82F6', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>⏳ Processing...</span>
+              </div>
+            );
+          }
+
+          return (
+            <div style={{ fontSize: '11px', color: '#10B981' }}>
+              <span>✓ Sent</span>
+            </div>
+          );
+        })()}
       </div>
     </motion.div>
   );
